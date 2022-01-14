@@ -1,0 +1,164 @@
+import pandas as pd
+# For this question I utilized the open-source program Pandas which is a
+# data manipulation tool that works in Python.  I wrote and tested the code
+# using the Spyder IDE as part of Anaconda, a Python distribution platform.
+"""
+My plan to create a model that can rank the vendors' sales abilities that 
+takes into consideration the advantage a vendor may have from working in a 
+section or on a day of the week that has a higher average. For example 
+Fridays may have a higher average hot dog sold per game than Mondays and 
+vendor 12 works more Mondays than vendor 4 who works Fridays.  It would be 
+unfair to straight compare their per game average as one vendor has an
+advantage due to what days they work even if they work the same number of 
+days.  Similarly to days of the week, a certain section may have more fans 
+on average or a different type of fan that creates fluctuations in how many
+hot dogs per game are consumed. To eliminate these advantages that a vendor 
+may randomly receive this I am going to normalize the average hot dogs sold 
+per vendor by creating a point system for how often a vendor worked in 
+a section or on a day of the week and then dividing the total number of 
+points from advantages by the total number # of days worked. This will 
+create an average advantage number for each worker.  Then I will find the 
+average, standard deviation, and z-score of the average advantage.  This 
+will allow me to standardize the average hot dogs sold per vendor and rank 
+their sales ability without external factors such as section or day of the 
+week worked.
+"""
+
+Q3_citi_vendors =pd.read_csv('Q3_citi_vendors.csv') 
+# loads Q3_citi_vendors file as a dataframe
+Vendor_mean = Q3_citi_vendors['hot_dogs_sold'].groupby(
+    Q3_citi_vendors['vendor']).mean()
+# Gives me the average hot dogs sold per vendor before normalizing 
+Ven_mean = pd.DataFrame(Vendor_mean)
+# This changes the series back into a dataframe
+Ven_mean = Ven_mean.round(2)
+Section_mean = Q3_citi_vendors['hot_dogs_sold'].groupby(
+    Q3_citi_vendors['section']).mean()
+# Gives me the average hot dogs sold per section as a series
+Sec_mean = pd.DataFrame(Section_mean)
+#this changes the series back into a dataframe
+Sec_mean = Sec_mean.round(2)
+Sec_mean['Sec_points'] = Sec_mean.rank(ascending = False)
+# Creates a point ranking list from highest to lowest average hot dogs sold 
+# where 20 is best and 1 is worst
+Sec_mean = Sec_mean.rename(columns={'hot_dogs_sold': 'Average_hot_dogs_sold'})
+Sec_mean_ranking = Sec_mean.sort_values(by = 'section',ascending=True)
+# Sorts the average hot dogs sold per section by section from lowest to 
+# highest because it will be multiplied later by the number of times each 
+# vendor works a specific section.
+Games_Per_Day= Q3_citi_vendors.duplicated((['game','day']),keep='first')
+Games_Per_Day = Q3_citi_vendors.drop_duplicates(['game','day'])
+# Drops any duplicate day for each game.  This will allow me to calculate how 
+# many of each day of the week
+# occur in the data frame
+Ct = pd.crosstab(Games_Per_Day['day'],Games_Per_Day['game'], margins=True)
+# This computes the number of days of the week that a game occured on 
+# throughout the entire season in a crosstable
+Ct = Ct.drop(index='All')
+# This drops the bottom row of the crosstable
+Ct1 = Ct.get("All") 
+# This captures only the last column which contains the number of each day of 
+# the week in the non-duplicated data frame
+Day_Count = Ct1.to_frame()
+# This converts the crosstable back to a dataframe
+Day_sum = Q3_citi_vendors['hot_dogs_sold'].groupby(
+    Q3_citi_vendors['day']).sum()
+# This computes the total sum of the hot dogs sold on each day of the week
+Day_sum = pd.DataFrame(Day_sum)
+# This converts the series back to a data frame
+Day_mean = Day_sum.iloc[:].div(Day_Count.All, axis=0)
+# This calculates the average hot dogs sold on each day of the week over the 
+# number of games played on each day of the week
+Day_mean = pd.DataFrame(Day_mean)
+# This changes the series back into a dataframe
+Day_mean= Day_mean.round(2)
+Day_mean['Day_points'] = Day_mean.rank(ascending=True)
+# Creates a point ranking list from highest to lowest average hot dogs sold 
+# where 7 is best and 1 is worst.
+Day_mean = Day_mean.rename(columns={'hot_dogs_sold': 'Average_hot_dogs_sold'})
+Day_mean_ranking = Day_mean.sort_values(by = 'day',ascending=True)
+# Sorts the average hot dogs sold per day by day from lowest to highest 
+# because it will be multiplied later by the number of times each vendor works
+# a specific day.
+# Next I have to calculate the average advantage that each vendor 
+# received from working in specific sections and on specific days.
+Vendor_day_count = pd.crosstab(
+    Q3_citi_vendors['vendor'],Q3_citi_vendors['day'], margins=True)
+Vendor_day_count = Vendor_day_count.drop(index='All')
+# Creates a data frame for the vendor by the number of times they work each 
+# day and total number of days worked.
+# This also cuts off the bottom row as it is not needed.
+Vendor_day_count_ind = Vendor_day_count.drop(columns = 'All')
+# Removes the final column as it is not needed.
+Vendor_day_count_ind_point = Vendor_day_count_ind.multiply(
+    Day_mean_ranking['Day_points'])
+# Multiplys each vendors' number of times worked per day of the week by the 
+# points each day was assigned.
+Vendor_day_sum = Vendor_day_count_ind_point.sum(axis=1)
+Ven_day_sum = pd.DataFrame(Vendor_day_sum)
+# Gives the total advantage from working specific days in a data frame.
+Vendor_sec_count = pd.crosstab(
+    Q3_citi_vendors['vendor'],Q3_citi_vendors['section'], margins=True)
+Vendor_sec_count = Vendor_sec_count.drop(index='All')
+# Creates a data frame for the vendor by the number of times they work each 
+# section and total number of sections worked.
+# This also cuts off the bottom row as it is not needed.
+Vendor_sec_count_ind = Vendor_sec_count.drop(columns = 'All')
+# Creates a data frame for each vendor by the number of times they work each 
+# section and cuts off the final column
+Vendor_sec_count_ind_point = Vendor_sec_count_ind.multiply(
+    Sec_mean_ranking['Sec_points'])
+# Multiplys each vendors' number of times worked per day of the week by the 
+# points each day was assigned
+Vendor_sec_sum = Vendor_sec_count_ind_point.sum(axis=1)
+Ven_sec_sum = pd.DataFrame(Vendor_sec_sum)
+# Gives the total advantage from working specific days
+Vendor_total_count = Vendor_day_count.get("All") 
+# This returns the total amount of days worked by each vendor.
+Ven_total_count = Vendor_total_count.to_frame()
+# Turns the vendor total days worked series back into a data frame
+Vendor_Average_Advantage = (Ven_sec_sum.iloc[:]+Ven_day_sum.iloc[:]).div(
+    Ven_total_count.All, axis=0)
+# This takes the average of the advantage each vendor received by working on a
+# specific day or in a specfic section.  It adds the total section advantage
+# and the total day advantage together and then divides by the number of days 
+# worked per vendor
+Avg_Ven_Avg_Adv =  Vendor_Average_Advantage.mean()
+# This gives the average of the average vendor advantage.  Next I want to find
+# out how much above or below each vendors' average advantage was compared to
+# the average of the vendor average advantage.
+Ven_mult = Vendor_Average_Advantage/Avg_Ven_Avg_Adv
+for idx, row in Ven_mult.iterrows():
+  if row[0] >= 1:
+    Ven_mult.loc[idx] = (row[0] - 1)*-1
+  elif row[0] < 1:
+    Ven_mult.loc[idx] = 1 - row[0]
+# By dividing each vendors' average advantage by the average of the vendors'
+# average advantage I have a percentage in decimal form.  To be able to 
+# multiply this by the unadjusted vendor average hot dogs sold per game I
+# have to manipulate the data to return a value some decimal away from 1.
+# Eventually this returned value or adjustment will need to be applied to the 
+# unadjused vendor average hot dogs sold per game and I want to make sure that
+# the value above 1 end up as negative decimals.  This is to show that these 
+# vendors' averages were lowered to reflect the increased advantages that 
+# they received.  Likewise the values below 1 have to be positive so that when
+# the vendors' average advantage is below the average of the vendors' average
+# advantage their average hot dogs sold per game is increased.
+Ven_adj= Ven_mult
+Ven_mean['Adjustment']= Ven_adj
+# This adds the adjustment values into the same data frame as the vendors'
+# average hot dogs per game.
+Vendor_mean_adj = Ven_mean['hot_dogs_sold']+(
+    Ven_mean['hot_dogs_sold']*Ven_mean['Adjustment'])
+# This formula adjusts the vendors' unadjusted hot dogs per game by adding the
+# average per game times the adjustment value per vendor.
+Vendor_mean_adj = pd.DataFrame(Vendor_mean_adj)
+# This turns the series into a data frame for ranking and sorting the 
+# final results
+Vendor_Average_Adjusted = Vendor_mean_adj.rank(
+    ascending = False).sort_values(by = 0)
+print(Vendor_Average_Adjusted)
+
+# This shows the adjusted vendor average hot dogs sold per game in ranking
+# order from highest to lowest.  This ranking is also included in the PDF as 
+# part of the Zip File.
